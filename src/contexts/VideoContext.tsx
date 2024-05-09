@@ -31,6 +31,8 @@ interface VideoContextState {
     selectedVideo?: string;
     setSelectedVideo: (value: string) => void;
     setIsVideoRequested: (value: boolean) => void;
+    allObjects: Object[];
+    setAllObjects: (objects: Object[]) => void;
 }
 
 interface ObjectInformation {
@@ -45,6 +47,11 @@ interface ObjectInformation {
 interface VideoFrame {
     frame: string;
     positions: ObjectInformation[];
+}
+
+interface Object {
+    id: number;
+    class: string;
 }
 
 export const VideoContext = createContext<VideoContextState>({
@@ -65,6 +72,8 @@ export const VideoContext = createContext<VideoContextState>({
     setVideoList: () => {},
     setSelectedVideo: () => {},
     setIsVideoRequested: () => {},
+    allObjects: [],
+    setAllObjects: () => {},
 });
 
 export function useVideoContext() {
@@ -82,6 +91,7 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
     const [playbackSpeed, setPlaybackSpeed] = useState(1);
     const [videoList, setVideoList] = useState<string[]>([]);
     const [selectedVideo, setSelectedVideo] = useState<string | undefined>();
+    const [allObjects, setAllObjects] = useState<Object[]>([]);
     const frameBuffer = useRef<VideoFrame[]>([]);
     const currentFrameIndex = useRef<number>(0)
 
@@ -166,6 +176,8 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
             selectedVideo: selectedVideo,
             setSelectedVideo: changeVideo,
             setIsVideoRequested: setIsVideoRequested,
+            allObjects: allObjects,
+            setAllObjects: setAllObjects,
         }}>
             {children}
         </VideoContext.Provider>

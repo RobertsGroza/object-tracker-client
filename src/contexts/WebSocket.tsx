@@ -71,6 +71,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
 
             if (message.type === "video_summary") {
                 videoContext.setFrameRate(parseInt(message.content.fps))
+                videoContext.setAllObjects(message.content.ids)
                 return;
             }
 
