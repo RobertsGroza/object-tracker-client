@@ -25,6 +25,8 @@ interface VideoContextState {
     setIsFullyLoaded: (value: boolean) => void;
     setIsPlaying: (value: boolean) => void;
     clearState: () => void;
+    playbackSpeed: number;
+    setPlaybackSpeed: (value: number) => void;
 }
 
 interface ObjectInformation {
@@ -54,6 +56,8 @@ export const VideoContext = createContext<VideoContextState>({
     videoEnded: false,
     showLoadingIndicator: false,
     isVideoRequested: false,
+    playbackSpeed: 1,
+    setPlaybackSpeed: () => {},
 });
 
 export function useVideoContext() {
@@ -68,6 +72,7 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
     const [videoEnded, setVideoEnded] = useState(false);
     const [isVideoRequested, setIsVideoRequested] = useState(false);
     const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+    const [playbackSpeed, setPlaybackSpeed] = useState(1);
     const frameBuffer = useRef<VideoFrame[]>([]);
     const currentFrameIndex = useRef<number>(0)
 
@@ -102,13 +107,13 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
                 }
             },
             // For some reason on firefox video plays slower than on chrome
-            (1000 / frameRate) - (navigator.userAgent.indexOf("Firefox") > -1 ? 5 : 0),
+            ((1000 / frameRate) - (navigator.userAgent.indexOf("Firefox") > -1 ? 5 : 0)) / playbackSpeed,
         );
 
         return () => {
             clearInterval(frameInterval);
         }
-    }, [isPlaying, frameRate, videoEnded, isFullyLoaded])
+    }, [isPlaying, frameRate, videoEnded, isFullyLoaded, playbackSpeed])
 
     const addFrameToBuffer = useCallback((frame: VideoFrame) => {
         setIsVideoRequested(true);
@@ -137,6 +142,8 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
             videoEnded: videoEnded,
             showLoadingIndicator: showLoadingIndicator,
             isVideoRequested: isVideoRequested,
+            playbackSpeed: playbackSpeed,
+            setPlaybackSpeed: setPlaybackSpeed,
         }}>
             {children}
         </VideoContext.Provider>
