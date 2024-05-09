@@ -69,6 +69,10 @@ export function VideoPlayer() {
         videoContext.setPlaybackSpeed(parseFloat(event.target.value));
     }, [videoContext]);
 
+    const changeSelectedVideo = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+        videoContext.setSelectedVideo(event.target.value);
+    }, [videoContext]);
+
     const buttonContent = () => {
         if (videoContext.videoEnded) {
             return "REPLAY";
@@ -98,6 +102,16 @@ export function VideoPlayer() {
             </select>
             <br />
             {videoContext.showLoadingIndicator && <h3>LOADING...</h3>}
+            <br />
+            <label htmlFor="videoSelect">Played video: </label>
+            <select
+                name="videoSelect"
+                id="videoSelect"
+                value={videoContext.selectedVideo}
+                onChange={changeSelectedVideo}
+            >
+                {videoContext.videoList.map(el => <option key={el} value={el}>{el}</option>)}
+            </select>
         </>
     )
 }

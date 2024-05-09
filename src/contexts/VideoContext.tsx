@@ -20,13 +20,17 @@ interface VideoContextState {
     videoEnded: boolean;
     showLoadingIndicator: boolean;
     isVideoRequested: boolean;
-    addFrameToBuffer: (frame: VideoFrame) => void;
+    addFrameToBuffer: (frame: VideoFrame, loadMoreFrames: (frameCount: number) => void) => void;
     setFrameRate: (frameRate: number) => void;
     setIsFullyLoaded: (value: boolean) => void;
     setIsPlaying: (value: boolean) => void;
-    clearState: () => void;
     playbackSpeed: number;
     setPlaybackSpeed: (value: number) => void;
+    videoList: string[];
+    setVideoList: (value: string[]) => void;
+    selectedVideo?: string;
+    setSelectedVideo: (value: string) => void;
+    setIsVideoRequested: (value: boolean) => void;
 }
 
 interface ObjectInformation {
@@ -50,7 +54,6 @@ export const VideoContext = createContext<VideoContextState>({
     isFullyLoaded: false,
     addFrameToBuffer: () => {},
     setFrameRate: () => {},
-    clearState: () => {},
     setIsFullyLoaded: () => {},
     setIsPlaying: () => {},
     videoEnded: false,
@@ -58,6 +61,10 @@ export const VideoContext = createContext<VideoContextState>({
     isVideoRequested: false,
     playbackSpeed: 1,
     setPlaybackSpeed: () => {},
+    videoList: [],
+    setVideoList: () => {},
+    setSelectedVideo: () => {},
+    setIsVideoRequested: () => {},
 });
 
 export function useVideoContext() {
@@ -73,6 +80,8 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
     const [isVideoRequested, setIsVideoRequested] = useState(false);
     const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
     const [playbackSpeed, setPlaybackSpeed] = useState(1);
+    const [videoList, setVideoList] = useState<string[]>([]);
+    const [selectedVideo, setSelectedVideo] = useState<string | undefined>();
     const frameBuffer = useRef<VideoFrame[]>([]);
     const currentFrameIndex = useRef<number>(0)
 
@@ -115,17 +124,26 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
         }
     }, [isPlaying, frameRate, videoEnded, isFullyLoaded, playbackSpeed])
 
-    const addFrameToBuffer = useCallback((frame: VideoFrame) => {
-        setIsVideoRequested(true);
+    const addFrameToBuffer = useCallback((frame: VideoFrame, loadMoreFrames: (frameCount: number) => void) => {
         frameBuffer.current.push(frame);
+
+        // Workaround - Load frames in chunks, so the receiving of videoFrames from WebSocket can be stopped with message
+        const buffer_chunk_length = 10;
+        if (frameBuffer.current.length % buffer_chunk_length === 0) {
+            loadMoreFrames(buffer_chunk_length);
+        }
     }, []);
 
-    const clearState = useCallback(() => {
+    const changeVideo = useCallback((video: string) => {
         setFrameRate(30);
         setCurrentVideoFrame(null);
         setIsFullyLoaded(false);
         setIsVideoRequested(false);
+        setIsPlaying(false);
+        setVideoEnded(false);
         frameBuffer.current = [];
+        currentFrameIndex.current = 0;
+        setSelectedVideo(video);
     }, []);
 
     return (
@@ -134,7 +152,6 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
             frameRate: frameRate,
             setFrameRate: setFrameRate,
             addFrameToBuffer: addFrameToBuffer,
-            clearState: clearState,
             isFullyLoaded: isFullyLoaded,
             setIsFullyLoaded: setIsFullyLoaded,
             isPlaying: isPlaying,
@@ -144,6 +161,11 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
             isVideoRequested: isVideoRequested,
             playbackSpeed: playbackSpeed,
             setPlaybackSpeed: setPlaybackSpeed,
+            videoList: videoList,
+            setVideoList: setVideoList,
+            selectedVideo: selectedVideo,
+            setSelectedVideo: changeVideo,
+            setIsVideoRequested: setIsVideoRequested,
         }}>
             {children}
         </VideoContext.Provider>

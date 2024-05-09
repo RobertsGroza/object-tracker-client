@@ -7,9 +7,13 @@ interface WebSocketContextProviderProps {
 
 interface WebSocketState {
     isConnected: boolean;
-    send: (message: string) => void;
+    send: (message: OutgoingMessage) => void;
 }
 
+interface OutgoingMessage {
+    type: string;
+    content: string;
+}
 
 
 export const WebSocketContext = createContext<WebSocketState>({
@@ -25,7 +29,17 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
     const videoContext = useVideoContext();
     const [isConnected, setIsConnected] = useState(false);
     const [ws, setWs] = useState<WebSocket | null>(null);
-    
+
+    const sendMessage = useCallback((message: OutgoingMessage) => {
+        if (ws && isConnected) {
+            ws.send(JSON.stringify(message));
+        }
+    }, [ws, isConnected]);
+
+    const requestVideoFrames = useCallback((frameCount: number) => {
+        sendMessage({ type: "get_frames", content: frameCount.toString() })
+    }, [sendMessage]);
+
     useEffect(() => {
         const ws = new WebSocket(`ws://${process.env.REACT_APP_WS_URL}`);
 
@@ -40,8 +54,18 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
         ws.onmessage = ({ data }) => {
             const message = JSON.parse(data);
 
+            const requestNextFrames = (frameCount: number) => {
+                ws.send(JSON.stringify({ type: "get_frames", content: frameCount.toString() }))
+            }
+
             if (message.type === "video_frame") {
-                videoContext.addFrameToBuffer(message);
+                videoContext.addFrameToBuffer(message, requestNextFrames);
+                return;
+            }
+
+            if (message.type === "video_list") {
+                videoContext.setVideoList(message.videos);
+                videoContext.setSelectedVideo(message.videos[0]);
                 return;
             }
 
@@ -60,18 +84,15 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const sendMessage = useCallback((message: string) => {
-        if (ws && isConnected) {
-            ws.send(message);
-        }
-    }, [ws, isConnected]);
-
     // Send play only if video hasn't yet been requested to server
     useEffect(() => {
-        if (videoContext.isPlaying && !videoContext.isVideoRequested) {
-            sendMessage("play");
+        if (ws && videoContext.isPlaying && !videoContext.isVideoRequested && videoContext.selectedVideo) {
+            sendMessage({ type: "play", content: videoContext.selectedVideo });
+            requestVideoFrames(10);
+            videoContext.setIsVideoRequested(true);
         }
-    }, [videoContext.isPlaying, videoContext.isVideoRequested, sendMessage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [videoContext.isPlaying, videoContext.isVideoRequested, sendMessage, videoContext.selectedVideo])
 
 
     return (
