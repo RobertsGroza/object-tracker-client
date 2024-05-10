@@ -7,6 +7,7 @@ interface WebSocketContextProviderProps {
 
 interface WebSocketState {
     isConnected: boolean;
+    hasConnectionIssue: boolean;
     send: (message: OutgoingMessage) => void;
 }
 
@@ -18,6 +19,7 @@ interface OutgoingMessage {
 
 export const WebSocketContext = createContext<WebSocketState>({
     isConnected: false,
+    hasConnectionIssue: false,
     send: () => {},
 });
 
@@ -28,6 +30,7 @@ export function useWebSocket() {
 export function WebSocketContextProvider({ children }: WebSocketContextProviderProps) {
     const videoContext = useVideoContext();
     const [isConnected, setIsConnected] = useState(false);
+    const [hasConnectionIssue, setHasConnectionIssue] = useState(false);
     const [ws, setWs] = useState<WebSocket | null>(null);
 
     const sendMessage = useCallback((message: OutgoingMessage) => {
@@ -45,10 +48,15 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
 
         ws.onopen = () => {
             setIsConnected(true);
+            setHasConnectionIssue(false);
         }
         
         ws.onclose = () => {
             setIsConnected(false);
+        }
+
+        ws.onerror = () => {
+            setHasConnectionIssue(true);
         }
 
         ws.onmessage = ({ data }) => {
@@ -66,6 +74,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
             if (message.type === "video_list") {
                 videoContext.setVideoList(message.videos);
                 videoContext.setSelectedVideo(message.videos[0]);
+                ws.send(JSON.stringify({ type: "get_summary", content: message.videos[0] }))
                 return;
             }
 
@@ -77,6 +86,11 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
 
             if (message.type === "video_end") {
                 videoContext.setIsFullyLoaded(true);
+                return;
+            }
+
+            if (message.type === "stop_buffer_success") {
+                videoContext.clearBuffer();
                 return;
             }
         }
@@ -100,6 +114,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
         <WebSocketContext.Provider value={{
             isConnected: isConnected,
             send: sendMessage,
+            hasConnectionIssue: hasConnectionIssue,
         }}>
             {children}
         </WebSocketContext.Provider>

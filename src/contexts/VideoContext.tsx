@@ -33,6 +33,7 @@ interface VideoContextState {
     setIsVideoRequested: (value: boolean) => void;
     allObjects: Object[];
     setAllObjects: (objects: Object[]) => void;
+    clearBuffer: () => void;
 }
 
 interface ObjectInformation {
@@ -74,6 +75,7 @@ export const VideoContext = createContext<VideoContextState>({
     setIsVideoRequested: () => {},
     allObjects: [],
     setAllObjects: () => {},
+    clearBuffer: () => {},
 });
 
 export function useVideoContext() {
@@ -111,7 +113,9 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
 
         frameInterval = setInterval(
             () => {
-                if (!isFullyLoaded && currentFrameIndex.current + frameRate > frameBuffer.current.length) {
+                const minimumBuffer = frameRate * 2
+
+                if (!isFullyLoaded && currentFrameIndex.current + minimumBuffer> frameBuffer.current.length) {
                     setShowLoadingIndicator(true);
                     return;
                 }                
@@ -155,6 +159,10 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
         currentFrameIndex.current = 0;
         setSelectedVideo(video);
     }, []);
+    
+    const clearBuffer = useCallback(() => {
+        frameBuffer.current = [];
+    }, []);
 
     return (
         <VideoContext.Provider value={{
@@ -178,6 +186,7 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
             setIsVideoRequested: setIsVideoRequested,
             allObjects: allObjects,
             setAllObjects: setAllObjects,
+            clearBuffer: clearBuffer,
         }}>
             {children}
         </VideoContext.Provider>

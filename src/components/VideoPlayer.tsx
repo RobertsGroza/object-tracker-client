@@ -1,5 +1,6 @@
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useVideoContext } from "contexts/VideoContext";
+import { useWebSocket } from "contexts/WebSocket";
 
 const STROKE_COLORS = [
     "rgb(255, 0, 0)",
@@ -29,8 +30,11 @@ const FILL_COLORS = [
 export function VideoPlayer() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoContext = useVideoContext();
+    const webSocket = useWebSocket();
     const [selectedObjectId, setSelectedObjectId] = useState<number>(-1);
     const [selectedClass, setSelectedClass] = useState<string>("all_classes");
+    const [showId, setShowId] = useState(true);
+    const [showClass, setShowClass] = useState(false);
 
     useEffect(() => {
         if (canvasRef.current && videoContext.currentVideoFrame) {
@@ -57,6 +61,14 @@ export function VideoPlayer() {
                             continue;
                         }
 
+                        const objectLabel = [];
+                        if (showId) {
+                            objectLabel.push(`ID: ${boundingBox.id}`);
+                        }
+                        if (showClass) {
+                            objectLabel.push(`class: ${boundingBox.class}`);
+                        }
+
                         ctx.beginPath();
                         ctx.strokeStyle = STROKE_COLORS[boundingBox.id % 10];
                         ctx.lineWidth = 3;
@@ -64,12 +76,15 @@ export function VideoPlayer() {
                         ctx.rect(boundingBox.x, boundingBox.y, boundingBox.width, boundingBox.height);
                         ctx.stroke();
                         ctx.fill();
+                        ctx.lineWidth = 1;
+                        ctx.font = "12px Arial";
+                        ctx.strokeText(objectLabel.join(", "), boundingBox.x, boundingBox.y - 3);
                     }
                 }
             };
             image.src = 'data:image/png;base64,' + videoContext.currentVideoFrame.frame;
         }
-    }, [videoContext.currentVideoFrame, selectedClass, selectedObjectId]);
+    }, [videoContext.currentVideoFrame, selectedClass, selectedObjectId, showId, showClass]);
 
     const playVideo = useCallback(() => {
         videoContext.setIsPlaying(!videoContext.isPlaying);
@@ -81,7 +96,11 @@ export function VideoPlayer() {
 
     const changeSelectedVideo = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
         videoContext.setSelectedVideo(event.target.value);
-    }, [videoContext]);
+        webSocket.send({ type: "stop_buffer", content: "" });
+        webSocket.send({ type: "get_summary", content: event.target.value });
+        setSelectedClass("all_classes");
+        setSelectedObjectId(-1);
+    }, [videoContext, webSocket]);
 
     const changeSelectedClass = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
         setSelectedClass(event.target.value);
@@ -104,9 +123,16 @@ export function VideoPlayer() {
         return "PLAY";
     }
 
+    if (!webSocket.isConnected || webSocket.hasConnectionIssue) {
+        return null;
+    }
+
     return (
         <>
-            <canvas ref={canvasRef} width="640" height="360"></canvas>
+            {videoContext.showLoadingIndicator
+                ? <h3>LOADING...</h3>
+                : <canvas ref={canvasRef} width="640" height="360"></canvas>
+            }
             <br />
             <button onClick={() => playVideo()}>{buttonContent()}</button>
             <br />
@@ -122,8 +148,6 @@ export function VideoPlayer() {
                 <option value="0.5">0.5x</option>
                 <option value="0.25">0.25x</option>
             </select>
-            <br />
-            {videoContext.showLoadingIndicator && <h3>LOADING...</h3>}
             <br />
             <label htmlFor="videoSelect">Played video: </label>
             <select
@@ -156,6 +180,24 @@ export function VideoPlayer() {
                 <option value={-1}>Show all</option>
                 {videoContext.allObjects.map(el => <option key={el.id} value={el.id}>ID: {el.id}, Class: {el.class}</option>)}
             </select>
+            <br />
+            <input
+                type="checkbox"
+                id="show_id"
+                name="show_id"
+                checked={showId}
+                onChange={(el) => setShowId(el.target.checked)}
+            />
+            <label htmlFor="show_id"> Show ID</label>
+            <br />
+            <input
+                type="checkbox"
+                id="show_class"
+                name="show_class"
+                checked={showClass}
+                onChange={(el) => setShowClass(el.target.checked)}
+            />
+            <label htmlFor="show_class"> Show class name</label>
         </>
     )
 }
