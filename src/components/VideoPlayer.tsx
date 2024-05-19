@@ -1,31 +1,9 @@
 import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useVideoContext } from "contexts/VideoContext";
+import { useVideoContext, ObjectTrackers } from "contexts/VideoContext";
 import { useWebSocket } from "contexts/WebSocket";
-
-const STROKE_COLORS = [
-    "rgb(255, 0, 0)",
-    "rgb(0, 255, 0)",
-    "rgb0, 0, 255)",
-    "rgb(255, 255, 0)",
-    "rgb(0, 255, 255)",
-    "rgb(255, 0, 255)",
-    "rgb(185, 185, 185)",
-    "rgb(122, 7, 42)",
-    "rgb(223, 154, 237)",
-    "rgb(135, 72, 0)",
-];
-const FILL_COLORS = [
-    "rgba(255, 0, 0, 0.2)",
-    "rgba(0, 255, 0, 0.2)",
-    "rgba0, 0, 255, 0.2)",
-    "rgba(255, 255, 0, 0.2)",
-    "rgba(0, 255, 255, 0.2)",
-    "rgba(255, 0, 255, 0.2)",
-    "rgba(185, 185, 185, 0.2)",
-    "rgba(122, 7, 42, 0.2)",
-    "rgba(223, 154, 237, 0.2)",
-    "rgba(135, 72, 0, 0.2)",
-];
+import { drawBoundingBox, drawMask } from "utils/drawBoundingBoxes";
+import "components/styles.css";
+import "components/video-loader.css";
 
 export function VideoPlayer() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,7 +21,6 @@ export function VideoPlayer() {
             const image = new Image();
             image.onload = function() {
                 if (ctx !== null && canvasRef.current && videoContext.currentVideoFrame) {
-                    // TODO: This can be calculated just once instead of each frame
                     const hRatio = canvasRef.current.width / image.width;
                     const vRatio = canvasRef.current.height / image.height;
                     const ratio  = Math.min ( hRatio, vRatio );
@@ -69,16 +46,12 @@ export function VideoPlayer() {
                             objectLabel.push(`class: ${boundingBox.class}`);
                         }
 
-                        ctx.beginPath();
-                        ctx.strokeStyle = STROKE_COLORS[boundingBox.id % 10];
-                        ctx.lineWidth = 3;
-                        ctx.fillStyle = FILL_COLORS[boundingBox.id % 10];
-                        ctx.rect(boundingBox.x, boundingBox.y, boundingBox.width, boundingBox.height);
-                        ctx.stroke();
-                        ctx.fill();
-                        ctx.lineWidth = 1;
-                        ctx.font = "12px Arial";
-                        ctx.strokeText(objectLabel.join(", "), boundingBox.x, boundingBox.y - 3);
+                        if (boundingBox.mask && boundingBox.mask[0]) {
+                            drawMask(ctx, boundingBox, objectLabel);
+                            continue;
+                        }
+
+                        drawBoundingBox(ctx, boundingBox, objectLabel);
                     }
                 }
             };
@@ -97,7 +70,7 @@ export function VideoPlayer() {
     const changeSelectedVideo = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
         videoContext.setSelectedVideo(event.target.value);
         webSocket.send({ type: "stop_buffer", content: "" });
-        webSocket.send({ type: "get_summary", content: event.target.value });
+        webSocket.send({ type: "get_summary", content: event.target.value, tracker: videoContext.objectTracker });
         setSelectedClass("all_classes");
         setSelectedObjectId(-1);
     }, [videoContext, webSocket]);
@@ -110,17 +83,38 @@ export function VideoPlayer() {
         setSelectedObjectId(parseInt(event.target.value));
     }, []);
 
+    const changeObjectTracker = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+        const selectedTracker = event.target.value as ObjectTrackers;
+        videoContext.setObjectTracker(selectedTracker);
+        if (videoContext.selectedVideo) {
+            videoContext.setSelectedVideo(videoContext.selectedVideo!);
+            webSocket.send({ type: "stop_buffer", content: "" });
+            webSocket.send({ type: "get_summary", content: videoContext.selectedVideo, tracker: selectedTracker });
+        }
+        setSelectedClass("all_classes");
+        setSelectedObjectId(-1);
+    }, [videoContext, webSocket]);
+
     function uniqueClassFilter(value: string, index: number, array: string[]) {
         return array.indexOf(value) === index;
     }
 
     const buttonContent = () => {
         if (videoContext.videoEnded) {
-            return "REPLAY";
+            return "Replay";
         } else if (videoContext.isPlaying) {
-            return "STOP";
+            return "Pause";
         }
-        return "PLAY";
+        return "Play";
+    }
+
+    const mainControlIcon = () => {
+        if (videoContext.videoEnded) {
+            return "repeat";
+        } else if (videoContext.isPlaying) {
+            return "pause";
+        }
+        return "play";    
     }
 
     if (!webSocket.isConnected || webSocket.hasConnectionIssue) {
@@ -129,75 +123,105 @@ export function VideoPlayer() {
 
     return (
         <>
-            {videoContext.showLoadingIndicator
-                ? <h3>LOADING...</h3>
-                : <canvas ref={canvasRef} width="640" height="360"></canvas>
-            }
-            <br />
-            <button onClick={() => playVideo()}>{buttonContent()}</button>
-            <br />
-            <label htmlFor="videoSpeed">Playback speed: </label>
-            <select
-                name="videoSpeed"
-                id="videoSpeed"
-                value={videoContext.playbackSpeed.toString()}
-                onChange={changePlaybackSpeed}
-            >
-                <option value="2">2x</option>
-                <option value="1">1x</option>
-                <option value="0.5">0.5x</option>
-                <option value="0.25">0.25x</option>
-            </select>
-            <br />
-            <label htmlFor="videoSelect">Played video: </label>
-            <select
-                name="videoSelect"
-                id="videoSelect"
-                value={videoContext.selectedVideo}
-                onChange={changeSelectedVideo}
-            >
-                {videoContext.videoList.map(el => <option key={el} value={el}>{el}</option>)}
-            </select>
-            <br />
-            <label htmlFor="classSelect">Show specific class: </label>
-            <select
-                name="classSelect"
-                id="classSelect"
-                value={selectedClass}
-                onChange={changeSelectedClass}
-            >
-                <option value="all_classes">Show all</option>
-                {videoContext.allObjects.map(el => el.class).filter(uniqueClassFilter).map(el => <option key={el} value={el}>{el}</option>)}
-            </select>
-            <br />
-            <label htmlFor="idSelect">Track specific ID: </label>
-            <select
-                name="idSelect"
-                id="idSelect"
-                value={selectedObjectId}
-                onChange={changeSelectedObject}
-            >
-                <option value={-1}>Show all</option>
-                {videoContext.allObjects.map(el => <option key={el.id} value={el.id}>ID: {el.id}, Class: {el.class}</option>)}
-            </select>
-            <br />
-            <input
-                type="checkbox"
-                id="show_id"
-                name="show_id"
-                checked={showId}
-                onChange={(el) => setShowId(el.target.checked)}
-            />
-            <label htmlFor="show_id"> Show ID</label>
-            <br />
-            <input
-                type="checkbox"
-                id="show_class"
-                name="show_class"
-                checked={showClass}
-                onChange={(el) => setShowClass(el.target.checked)}
-            />
-            <label htmlFor="show_class"> Show class name</label>
+            <div className="video-container">
+                <canvas ref={canvasRef} width="640" height="360" onClick={() => playVideo()}></canvas>
+                {videoContext.showLoadingIndicator
+                    ? <div className="video-loader"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+                    : (
+                        <div className="video-control-indicator" style={{ display: videoContext.isPlaying ? "none" : undefined }}>
+                            <i className={`fa fa-${videoContext.videoEnded ? "repeat" : "play"}`}></i>
+                        </div>
+                    )
+                }
+            </div>
+            <div className="video-controls">
+                <div className="control-group">
+                    <label htmlFor="videoSelect">Played video: </label>
+                    <select
+                        name="videoSelect"
+                        id="videoSelect"
+                        value={videoContext.selectedVideo}
+                        onChange={changeSelectedVideo}
+                    >
+                        {videoContext.videoList.map(el => <option key={el} value={el}>{el}</option>)}
+                    </select>
+                </div>
+                <div className="control-group">
+                    <label htmlFor="tracker">Object tracker: </label>
+                    <select
+                        name="tracker"
+                        id="tracker"
+                        value={videoContext.objectTracker}
+                        onChange={changeObjectTracker}
+                    >
+                        {Object.values(ObjectTrackers).map(el => (
+                            <option key={el} value={el}>{el}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="control-group">
+                    <label htmlFor="classSelect">Show specific class: </label>
+                    <select
+                        name="classSelect"
+                        id="classSelect"
+                        value={selectedClass}
+                        onChange={changeSelectedClass}
+                    >
+                        <option value="all_classes">Track all</option>
+                        {videoContext.allObjects.map(el => el.class).filter(uniqueClassFilter).map(el => <option key={el} value={el}>{el}</option>)}
+                    </select>
+                </div>
+                <div className="control-group">
+                    <label htmlFor="idSelect">Track specific ID: </label>
+                    <select
+                        name="idSelect"
+                        id="idSelect"
+                        value={selectedObjectId}
+                        onChange={changeSelectedObject}
+                    >
+                        <option value={-1}>Track all {videoContext.allObjects.length} objects</option>
+                        {videoContext.allObjects.map(el => <option key={el.id} value={el.id}>ID: {el.id}, Class: {el.class}</option>)}
+                    </select>
+                </div>
+                <div className="control-group">
+                    <label htmlFor="videoSpeed">Playback speed: </label>
+                    <select
+                        name="videoSpeed"
+                        id="videoSpeed"
+                        value={videoContext.playbackSpeed.toString()}
+                        onChange={changePlaybackSpeed}
+                    >
+                        <option value="2">2x</option>
+                        <option value="1">1x</option>
+                        <option value="0.5">0.5x</option>
+                        <option value="0.25">0.25x</option>
+                    </select>
+                </div>
+                <div className="control-group-checkbox">
+                    <input
+                        type="checkbox"
+                        id="show_id"
+                        name="show_id"
+                        checked={showId}
+                        onChange={(el) => setShowId(el.target.checked)}
+                    />
+                    <label htmlFor="show_id"> Show ID</label>
+                </div>
+                <div className="control-group-checkbox">
+                    <input
+                        type="checkbox"
+                        id="show_class"
+                        name="show_class"
+                        checked={showClass}
+                        onChange={(el) => setShowClass(el.target.checked)}
+                    />
+                    <label htmlFor="show_class"> Show class name</label>
+                </div>
+                <button className="main-button" onClick={() => playVideo()}>
+                    <i style={{ paddingRight: 6 }} className={`fa fa-${mainControlIcon()}`}></i>
+                    {buttonContent()}
+                </button>
+            </div>
         </>
     )
 }

@@ -1,4 +1,5 @@
 import { useWebSocket } from "contexts/WebSocket";
+import "components/styles.css";
 
 export function WSLoadingScreen() {
     const webSocket = useWebSocket();
@@ -8,11 +9,16 @@ export function WSLoadingScreen() {
     }
 
     return(
-        <>
-            <h2>Waiting for WS connection...</h2>
-            {webSocket.hasConnectionIssue && (
-                <p style={{ color: "red" }}>Error while connecting. Try reloading!</p>
-            )}
-        </>
+        <div className="ws-loading-screen">
+            {webSocket.hasConnectionIssue
+                ? <h3 style={{ color: "red" }}>Error while connecting. Try reloading!</h3>
+                : (
+                    <>
+                        <div className="loader" />
+                        <p>Connecting to WebSocket...</p>
+                    </>
+                )
+            }
+        </div>
     )
 }

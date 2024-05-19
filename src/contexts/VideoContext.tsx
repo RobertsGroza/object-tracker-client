@@ -34,15 +34,18 @@ interface VideoContextState {
     allObjects: Object[];
     setAllObjects: (objects: Object[]) => void;
     clearBuffer: () => void;
+    objectTracker: ObjectTrackers;
+    setObjectTracker: (objectTracker: ObjectTrackers) => void;
 }
 
-interface ObjectInformation {
+export interface ObjectInformation {
     id: number;
     class: string;
     x: number;
     y: number;
     width: number;
     height: number;
+    mask?: [number, number][];
 }
 
 interface VideoFrame {
@@ -53,6 +56,13 @@ interface VideoFrame {
 interface Object {
     id: number;
     class: string;
+}
+
+export enum ObjectTrackers {
+    sort = "SORT",
+    deepSort = "DEEP_SORT",
+    byteTrack = "BYTE_TRACK",
+    byteTrackSegmented = "BYTE_TRACK_SEGMENTED",
 }
 
 export const VideoContext = createContext<VideoContextState>({
@@ -76,6 +86,8 @@ export const VideoContext = createContext<VideoContextState>({
     allObjects: [],
     setAllObjects: () => {},
     clearBuffer: () => {},
+    objectTracker: ObjectTrackers.sort,
+    setObjectTracker: () => {},
 });
 
 export function useVideoContext() {
@@ -94,6 +106,8 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
     const [videoList, setVideoList] = useState<string[]>([]);
     const [selectedVideo, setSelectedVideo] = useState<string | undefined>();
     const [allObjects, setAllObjects] = useState<Object[]>([]);
+    const [isBufferBuilt, setIsBufferBuilt] = useState(false);
+    const [objectTracker, setObjectTracker] = useState<ObjectTrackers>(ObjectTrackers.sort);
     const frameBuffer = useRef<VideoFrame[]>([]);
     const currentFrameIndex = useRef<number>(0)
 
@@ -113,12 +127,16 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
 
         frameInterval = setInterval(
             () => {
-                const minimumBuffer = frameRate * 2
-
-                if (!isFullyLoaded && currentFrameIndex.current + minimumBuffer> frameBuffer.current.length) {
+                if (isBufferBuilt && !isFullyLoaded && currentFrameIndex.current + 5> frameBuffer.current.length) {
+                    setShowLoadingIndicator(true);
+                    setIsBufferBuilt(false);
+                    return;
+                }           
+                
+                if (!isBufferBuilt) {
                     setShowLoadingIndicator(true);
                     return;
-                }                
+                }
 
                 if (frameBuffer.current[currentFrameIndex.current]) {
                     setShowLoadingIndicator(false);
@@ -126,7 +144,7 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
                     currentFrameIndex.current += 1;
                 } else {
                     setVideoEnded(true);
-                    setIsPlaying(false); // TODO: HERE CAN ADD LOOP LOGIC
+                    setIsPlaying(false);
                 }
             },
             // For some reason on firefox video plays slower than on chrome
@@ -136,9 +154,15 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
         return () => {
             clearInterval(frameInterval);
         }
-    }, [isPlaying, frameRate, videoEnded, isFullyLoaded, playbackSpeed])
+    }, [isPlaying, frameRate, videoEnded, isFullyLoaded, playbackSpeed, isBufferBuilt])
 
     const addFrameToBuffer = useCallback((frame: VideoFrame, loadMoreFrames: (frameCount: number) => void) => {
+        // When buffer end is reached, build at least minimumBufferSize
+        const minimumBufferSize = 2 * frameRate;
+        if (currentFrameIndex.current + minimumBufferSize < frameBuffer.current.length) {
+            setIsBufferBuilt(true);
+        }
+        
         frameBuffer.current.push(frame);
 
         // Workaround - Load frames in chunks, so the receiving of videoFrames from WebSocket can be stopped with message
@@ -146,7 +170,7 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
         if (frameBuffer.current.length % buffer_chunk_length === 0) {
             loadMoreFrames(buffer_chunk_length);
         }
-    }, []);
+    }, [frameRate]);
 
     const changeVideo = useCallback((video: string) => {
         setFrameRate(30);
@@ -187,6 +211,8 @@ export function VideoContextProvider({ children }: VideoContextProviderProps) {
             allObjects: allObjects,
             setAllObjects: setAllObjects,
             clearBuffer: clearBuffer,
+            objectTracker: objectTracker,
+            setObjectTracker: setObjectTracker,
         }}>
             {children}
         </VideoContext.Provider>

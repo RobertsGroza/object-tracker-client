@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useState, useEffect } from "react";
-import { useVideoContext } from "contexts/VideoContext";
+import { useVideoContext, ObjectTrackers } from "contexts/VideoContext";
 
 interface WebSocketContextProviderProps {
     children: ReactNode;
@@ -14,6 +14,7 @@ interface WebSocketState {
 interface OutgoingMessage {
     type: string;
     content: string;
+    tracker?: ObjectTrackers;
 }
 
 
@@ -44,7 +45,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
     }, [sendMessage]);
 
     useEffect(() => {
-        const ws = new WebSocket(`ws://${process.env.REACT_APP_WS_URL}`);
+        const ws = new WebSocket("ws://localhost:7890");
 
         ws.onopen = () => {
             setIsConnected(true);
@@ -74,7 +75,11 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
             if (message.type === "video_list") {
                 videoContext.setVideoList(message.videos);
                 videoContext.setSelectedVideo(message.videos[0]);
-                ws.send(JSON.stringify({ type: "get_summary", content: message.videos[0] }))
+                ws.send(JSON.stringify({
+                    type: "get_summary",
+                    content: message.videos[0],
+                    tracker: ObjectTrackers.sort,
+                }))
                 return;
             }
 
@@ -102,7 +107,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
     // Send play only if video hasn't yet been requested to server
     useEffect(() => {
         if (ws && videoContext.isPlaying && !videoContext.isVideoRequested && videoContext.selectedVideo) {
-            sendMessage({ type: "play", content: videoContext.selectedVideo });
+            sendMessage({ type: "play", content: videoContext.selectedVideo, tracker: videoContext.objectTracker });
             requestVideoFrames(10);
             videoContext.setIsVideoRequested(true);
         }
