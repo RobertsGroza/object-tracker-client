@@ -47,7 +47,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
     }, [sendMessage]);
 
     useEffect(() => {
-        const ws = new WebSocket("ws://localhost:7890");
+        const ws = new WebSocket("wss://robertsgroza.id.lv/socket/");
 
         ws.onopen = () => {
             setIsConnected(true);
