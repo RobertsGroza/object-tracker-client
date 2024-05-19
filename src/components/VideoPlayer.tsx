@@ -2,6 +2,7 @@ import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useVideoContext, ObjectTrackers } from "contexts/VideoContext";
 import { useWebSocket } from "contexts/WebSocket";
 import { drawBoundingBox, drawMask } from "utils/drawBoundingBoxes";
+import { drawFPS } from "utils/drawFPS";
 import "components/styles.css";
 import "components/video-loader.css";
 
@@ -13,6 +14,12 @@ export function VideoPlayer() {
     const [selectedClass, setSelectedClass] = useState<string>("all_classes");
     const [showId, setShowId] = useState(true);
     const [showClass, setShowClass] = useState(false);
+
+    // For FPS counter logic
+    const [showFPS, setShowFPS] = useState(false);
+    const [prevFrameTime, setPrevFrameTime] = useState(0);
+    const [fpsSum, setFpsSum] = useState(0);
+    const [fpsCount, setFpsCount] = useState(0);
 
     useEffect(() => {
         if (canvasRef.current && videoContext.currentVideoFrame) {
@@ -53,13 +60,27 @@ export function VideoPlayer() {
 
                         drawBoundingBox(ctx, boundingBox, objectLabel);
                     }
+
+                    // FPS counter logic
+                    if (!showFPS) {
+                        return;
+                    }
+                    const fps = 1000 / (performance.now() - prevFrameTime);
+                    drawFPS(ctx, fps);
+                    setFpsSum(el => el + fps);
+                    setFpsCount(el => el + 1);
+                    setPrevFrameTime(performance.now());
                 }
             };
             image.src = 'data:image/png;base64,' + videoContext.currentVideoFrame.frame;
         }
-    }, [videoContext.currentVideoFrame, selectedClass, selectedObjectId, showId, showClass]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [videoContext.currentVideoFrame, selectedClass, selectedObjectId, showId, showClass, showFPS]);
 
     const playVideo = useCallback(() => {
+        setFpsCount(0);
+        setFpsSum(0);
+        setPrevFrameTime(0);
         videoContext.setIsPlaying(!videoContext.isPlaying);
     }, [videoContext]);
 
@@ -216,6 +237,16 @@ export function VideoPlayer() {
                         onChange={(el) => setShowClass(el.target.checked)}
                     />
                     <label htmlFor="show_class"> Show class name</label>
+                </div>
+                <div className="control-group-checkbox">
+                    <input
+                        type="checkbox"
+                        id="show_fps"
+                        name="show_fps"
+                        checked={showFPS}
+                        onChange={(el) => setShowFPS(el.target.checked)}
+                    />
+                    <label htmlFor="show_fps"> Show FPS{showFPS && ` (AVG FPS: ${fpsSum / fpsCount})`}</label>
                 </div>
                 <button className="main-button" onClick={() => playVideo()}>
                     <i style={{ paddingRight: 6 }} className={`fa fa-${mainControlIcon()}`}></i>
