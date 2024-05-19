@@ -69,8 +69,8 @@ export function VideoPlayer() {
 
     const changeSelectedVideo = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
         videoContext.setSelectedVideo(event.target.value);
-        webSocket.send({ type: "stop_buffer", content: "" });
-        webSocket.send({ type: "get_summary", content: event.target.value, tracker: videoContext.objectTracker });
+        webSocket.send({ type: "stop_buffer" });
+        webSocket.send({ type: "get_summary", video_name: event.target.value, tracker: videoContext.objectTracker });
         setSelectedClass("all_classes");
         setSelectedObjectId(-1);
     }, [videoContext, webSocket]);
@@ -88,8 +88,8 @@ export function VideoPlayer() {
         videoContext.setObjectTracker(selectedTracker);
         if (videoContext.selectedVideo) {
             videoContext.setSelectedVideo(videoContext.selectedVideo!);
-            webSocket.send({ type: "stop_buffer", content: "" });
-            webSocket.send({ type: "get_summary", content: videoContext.selectedVideo, tracker: selectedTracker });
+            webSocket.send({ type: "stop_buffer" });
+            webSocket.send({ type: "get_summary", video_name: videoContext.selectedVideo, tracker: selectedTracker });
         }
         setSelectedClass("all_classes");
         setSelectedObjectId(-1);

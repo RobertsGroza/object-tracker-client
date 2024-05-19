@@ -13,8 +13,10 @@ interface WebSocketState {
 
 interface OutgoingMessage {
     type: string;
-    content: string;
+    content?: string;
     tracker?: ObjectTrackers;
+    video_name?: string;
+    count?: string;
 }
 
 
@@ -41,7 +43,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
     }, [ws, isConnected]);
 
     const requestVideoFrames = useCallback((frameCount: number) => {
-        sendMessage({ type: "get_frames", content: frameCount.toString() })
+        sendMessage({ type: "get_frames", count: frameCount.toString() })
     }, [sendMessage]);
 
     useEffect(() => {
@@ -64,7 +66,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
             const message = JSON.parse(data);
 
             const requestNextFrames = (frameCount: number) => {
-                ws.send(JSON.stringify({ type: "get_frames", content: frameCount.toString() }))
+                ws.send(JSON.stringify({ type: "get_frames", count: frameCount.toString() }))
             }
 
             if (message.type === "video_frame") {
@@ -77,7 +79,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
                 videoContext.setSelectedVideo(message.videos[0]);
                 ws.send(JSON.stringify({
                     type: "get_summary",
-                    content: message.videos[0],
+                    video_name: message.videos[0],
                     tracker: ObjectTrackers.sort,
                 }))
                 return;
@@ -107,7 +109,7 @@ export function WebSocketContextProvider({ children }: WebSocketContextProviderP
     // Send play only if video hasn't yet been requested to server
     useEffect(() => {
         if (ws && videoContext.isPlaying && !videoContext.isVideoRequested && videoContext.selectedVideo) {
-            sendMessage({ type: "play", content: videoContext.selectedVideo, tracker: videoContext.objectTracker });
+            sendMessage({ type: "play", video_name: videoContext.selectedVideo, tracker: videoContext.objectTracker });
             requestVideoFrames(10);
             videoContext.setIsVideoRequested(true);
         }
